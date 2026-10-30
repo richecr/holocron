@@ -1,0 +1,22 @@
+# Binaries
+/hc
+/hc.exe
+dist/
+
+# Test artifacts
+coverage.out
+coverage.html
+*.test
+
+# Go workspace file (local only)
+go.work
+go.work.sum
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

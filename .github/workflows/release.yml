@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and upload binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build release binaries
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+
+          build() {
+            local goos=$1 goarch=$2
+            local ext="" name="hc_${VERSION}_${goos}_${goarch}"
+
+            if [ "$goos" = "windows" ]; then
+              ext=".exe"
+            fi
+
+            echo "::group::Building ${name}"
+            GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 \
+              go build -trimpath -ldflags "-s -w" -o "dist/hc${ext}" .
+
+            mkdir -p "dist/${name}"
+            cp "dist/hc${ext}" "dist/${name}/"
+            cp README.md "dist/${name}/"
+
+            if [ "$goos" = "windows" ]; then
+              (cd dist && python3 -m zipfile -c "${name}.zip" "${name}")
+            else
+              (cd dist && tar -czf "${name}.tar.gz" "${name}")
+            fi
+
+            rm -rf "dist/${name}" "dist/hc${ext}"
+            echo "::endgroup::"
+          }
+
+          build linux amd64
+          build linux arm64
+          build darwin amd64
+          build darwin arm64
+          build windows amd64
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum ./*.tar.gz ./*.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload assets to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" \
+            dist/*.tar.gz dist/*.zip dist/SHA256SUMS.txt \
+            --clobber
