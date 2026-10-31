@@ -142,8 +142,10 @@ func TestSelectShell(t *testing.T) {
 		name     string
 		settings config.Settings
 		goos     string
+		override string
 		want     string
 		wantFlag string
+		wantErr  bool
 	}{
 		{
 			name:     "linux default is /bin/sh -c",
@@ -193,11 +195,48 @@ func TestSelectShell(t *testing.T) {
 			want:     "powershell.exe",
 			wantFlag: "-NoProfile",
 		},
+		{
+			name:     "override wins over config",
+			settings: config.Settings{DefaultShell: map[string]string{"linux": "bash"}},
+			goos:     "linux",
+			override: "zsh",
+			want:     "zsh",
+			wantFlag: "-c",
+		},
+		{
+			name:     "override powershell keeps -NoProfile",
+			goos:     "linux",
+			override: "powershell",
+			want:     "powershell.exe",
+			wantFlag: "-NoProfile",
+		},
+		{
+			name:     "invalid override is an error",
+			goos:     "linux",
+			override: "fish",
+			wantErr:  true,
+		},
+		{
+			name:     "invalid config shell falls back to OS default",
+			settings: config.Settings{DefaultShell: map[string]string{"linux": "fish"}},
+			goos:     "linux",
+			want:     "/bin/sh",
+			wantFlag: "-c",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, gotFlag := selectShell(tt.settings, tt.goos)
+			got, gotFlag, err := selectShell(tt.settings, tt.goos, tt.override)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("selectShell() = %q, want error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("selectShell() error = %v", err)
+			}
 			if got != tt.want {
 				t.Errorf("selectShell() shell = %q, want %q", got, tt.want)
 			}
@@ -205,6 +244,22 @@ func TestSelectShell(t *testing.T) {
 				t.Errorf("selectShell() flag = %q, want %q", gotFlag, tt.wantFlag)
 			}
 		})
+	}
+}
+
+func TestRunDirDoesNotExist(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("path used in this test is unix-specific")
+	}
+
+	script := config.ScriptConfig{
+		Command: "echo hi",
+		Dir:     "/nonexistent-holocron-test-dir",
+	}
+
+	err := Run(script, config.Settings{}, nil, "")
+	if err == nil {
+		t.Fatal("Run() with nonexistent dir = nil, want error")
 	}
 }
 

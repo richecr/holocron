@@ -32,6 +32,13 @@ updated per OS; description and tags only change when the flags are passed.`,
 		name := args[0]
 		command := args[1]
 
+		for _, platform := range addPlatforms {
+			normalized := strings.ToLower(strings.TrimSpace(platform))
+			if !config.IsKnownPlatform(normalized) {
+				fatal("unknown platform %q (accepted: linux, darwin, windows)", platform)
+			}
+		}
+
 		cfg, path := loadCatalog()
 
 		cfg.Scripts[name] = mergeScript(cfg.Scripts[name], command, addDesc, addPlatforms, addTags)

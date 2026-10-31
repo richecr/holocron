@@ -24,6 +24,10 @@ $ hc docker:up
   `hc build:java -- --debug`.
 - **Tags & listing** — organize scripts with tags, filter them
   (`hc list --tag docker`) or consume the catalog as JSON (`hc list --json`).
+- **Env vars & working dir** — each script can set its own environment
+  variables and working directory in the TOML catalog.
+- **Import & export** — back up, version in git, or sync catalogs between
+  machines: `hc export > catalog.toml` / `hc import catalog.toml`.
 - **Dry run** — preview the resolved command without executing it:
   `hc --dry build:java`.
 - **Health check** — `hc doctor` validates shells, platforms and empty
@@ -44,9 +48,9 @@ it and put `hc` on your `PATH`:
 
 ```sh
 # Linux (amd64) example
-curl -LO https://github.com/richecr/holocron/releases/download/v0.2.0/hc_0.2.0_linux_amd64.tar.gz
-tar -xzf hc_0.2.0_linux_amd64.tar.gz
-sudo mv hc_0.2.0_linux_amd64/hc /usr/local/bin/hc
+curl -LO https://github.com/richecr/holocron/releases/download/v0.3.0/hc_0.3.0_linux_amd64.tar.gz
+tar -xzf hc_0.3.0_linux_amd64.tar.gz
+sudo mv hc_0.3.0_linux_amd64/hc /usr/local/bin/hc
 ```
 
 | Asset | Platform |
@@ -56,6 +60,7 @@ sudo mv hc_0.2.0_linux_amd64/hc /usr/local/bin/hc
 | `hc_<version>_darwin_amd64.tar.gz` | macOS Intel |
 | `hc_<version>_darwin_arm64.tar.gz` | macOS Apple Silicon |
 | `hc_<version>_windows_amd64.zip` | Windows x86_64 (`hc.exe`) |
+| `hc_<version>_windows_arm64.zip` | Windows ARM64 (`hc.exe`) |
 
 Each archive also contains a `SHA256SUMS.txt` file to verify downloads.
 
@@ -161,9 +166,12 @@ The first `hc` command creates the configuration file automatically
 | [`hc remove <name>`](#hc-remove) | Remove a script (alias: `hc rm`) |
 | [`hc doctor`](#hc-doctor) | Check the catalog for problems |
 | [`hc config`](#hc-config) | Print or edit the config file path |
+| [`hc export`](#hc-export) | Export the catalog as TOML |
+| [`hc import`](#hc-import) | Import scripts from a TOML file |
 | [`hc completion`](#hc-completion) | Generate shell completion scripts |
 
-Every command also accepts `--help` (or `-h`) for its own usage text.
+Every command also accepts `--help` (or `-h`) for its own usage text, and the
+root command accepts `--version` to print the binary version.
 
 **How invocation works:**
 
@@ -187,6 +195,7 @@ executing it in the configured shell.
 | Flag | Description |
 |---|---|
 | `--dry` | Print the resolved command (including forwarded args) instead of running it |
+| `--shell <shell>` | Run with this shell for one call (`sh`, `bash`, `zsh`, `powershell`, `cmd`), overriding `settings.default_shell` |
 
 ```sh
 $ hc --dry build:java -- --debug
@@ -208,6 +217,8 @@ Behavior:
   resolved command and asks `Run <command> ? [y/N]` before executing.
 - Typos get suggestions:
   `hc buld:java` → `script not found: buld:java (did you mean build:java?)`.
+- Scripts with `env` / `dir` run with those environment variables and in that
+  working directory (see [Configuration](#configuration)).
 
 ### `hc list`
 
@@ -356,6 +367,45 @@ hc config edit     # open config.toml in your editor
 `config edit` uses `$VISUAL`, then `$EDITOR`, falling back to `notepad` on
 Windows and `nano` elsewhere.
 
+### `hc export`
+
+```sh
+hc export [--tag <tag>]
+```
+
+Prints the whole catalog (settings and scripts) as TOML to stdout. Pipe it to
+a file to back it up or version it in git. With `--tag`, only the scripts
+carrying that tag are exported.
+
+```sh
+hc export > holocron.toml
+hc export --tag docker > docker-scripts.toml
+```
+
+### `hc import`
+
+```sh
+hc import <file>    # or: hc import -   (read from stdin)
+```
+
+Imports scripts from a TOML file into the catalog — typically one previously
+produced by `hc export`.
+
+- Imported scripts **replace** scripts with the same name; scripts that exist
+  only in the current catalog are kept.
+- The `[settings]` section of the file is ignored — import never touches your
+  local settings.
+- The incoming scripts are validated first; errors (e.g. a script with no
+  command) abort the import before anything is saved.
+
+```sh
+# Sync the catalog from a git repo
+git -C ~/dotfiles pull && hc import ~/dotfiles/holocron.toml
+
+# Or pipe it
+curl -s https://example.com/team.toml | hc import -
+```
+
 ### `hc completion`
 
 ```sh
@@ -425,11 +475,17 @@ tags = ["docker"]
 [scripts."build:java"]
 description = "Build the Java project with Maven Wrapper"
 tags = ["java", "build"]
+# Optional per-script working directory, resolved relative to where you run hc.
+dir = "./backend"
 
 [scripts."build:java".platforms]
 linux = "./mvnw clean package"
 darwin = "./mvnw clean package"
 windows = ".\\mvnw.cmd clean package"
+
+# Optional per-script environment: added on top of your environment.
+[scripts."build:java".env]
+MAVEN_OPTS = "-Xmx1g"
 ```
 
 ### Command resolution

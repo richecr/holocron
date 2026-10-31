@@ -15,6 +15,7 @@ import (
 )
 
 var runDry bool
+var runShell string
 
 var runCmd = &cobra.Command{
 	Use:   "run <script> [args...]",
@@ -30,11 +31,11 @@ appended to the resolved command, e.g.:
   hc run build:java -- --debug`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		runScript(args[0], stripDashDash(args[1:]), runDry)
+		runScript(args[0], stripDashDash(args[1:]), runDry, runShell)
 	},
 }
 
-func runScript(scriptName string, extraArgs []string, dry bool) {
+func runScript(scriptName string, extraArgs []string, dry bool, shellOverride string) {
 	cfg, _ := loadCatalog()
 
 	script, ok := cfg.Scripts[scriptName]
@@ -67,7 +68,7 @@ func runScript(scriptName string, extraArgs []string, dry bool) {
 		}
 	}
 
-	if err := executor.Run(script, cfg.Settings, extraArgs); err != nil {
+	if err := executor.Run(script, cfg.Settings, extraArgs, shellOverride); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			os.Exit(exitErr.ExitCode())
@@ -85,5 +86,6 @@ func stripDashDash(args []string) []string {
 
 func init() {
 	runCmd.Flags().BoolVar(&runDry, "dry", false, "print the resolved command without running it")
+	runCmd.Flags().StringVar(&runShell, "shell", "", "shell for this run (sh, bash, zsh, powershell, cmd); overrides the config")
 	runCmd.Flags().SetInterspersed(false)
 }

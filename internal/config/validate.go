@@ -24,6 +24,18 @@ var knownPlatforms = map[string]bool{
 	"windows": true,
 }
 
+func IsKnownPlatform(name string) bool {
+	return knownPlatforms[name]
+}
+
+func ValidShells() []string {
+	return []string{"sh", "bash", "zsh", "powershell", "cmd"}
+}
+
+func IsValidShell(name string) bool {
+	return validShells[name]
+}
+
 func Validate(cfg *Config) []Issue {
 	var issues []Issue
 
