@@ -24,6 +24,8 @@ type ScriptConfig struct {
 	Command     string            `toml:"command,omitempty"`
 	Tags        []string          `toml:"tags,omitempty"`
 	Platforms   map[string]string `toml:"platforms,omitempty"`
+	Env         map[string]string `toml:"env,omitempty"`
+	Dir         string            `toml:"dir,omitempty"`
 }
 
 func DefaultConfig() *Config {
@@ -50,6 +52,10 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
 
+	return Decode(data)
+}
+
+func Decode(data []byte) (*Config, error) {
 	cfg := &Config{}
 	if err := toml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
@@ -65,12 +71,16 @@ func LoadConfig(path string) (*Config, error) {
 	return cfg, nil
 }
 
+func Encode(cfg *Config) ([]byte, error) {
+	return toml.Marshal(cfg)
+}
+
 func SaveConfig(path string, cfg *Config) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	data, err := toml.Marshal(cfg)
+	data, err := Encode(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to encode config: %w", err)
 	}

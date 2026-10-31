@@ -87,11 +87,13 @@ func TestFormatScriptDetail(t *testing.T) {
 		Command:     "./mvnw package",
 		Tags:        []string{"java", "build"},
 		Platforms:   map[string]string{"linux": "make java"},
+		Env:         map[string]string{"DEBUG": "1", "APP": "backend"},
+		Dir:         "./backend",
 	}
 
 	out := FormatScriptDetail("build:java", script, "linux", "make java")
 
-	for _, want := range []string{"build:java", "Build Java", "java, build", "make java", "./mvnw package", "On this OS (linux)"} {
+	for _, want := range []string{"build:java", "Build Java", "java, build", "make java", "./mvnw package", "On this OS (linux)", "./backend", "APP=backend", "DEBUG=1"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("FormatScriptDetail() missing %q in:\n%s", want, out)
 		}

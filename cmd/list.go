@@ -57,6 +57,8 @@ type jsonScript struct {
 	Tags        []string          `json:"tags,omitempty"`
 	Command     string            `json:"command,omitempty"`
 	Platforms   map[string]string `json:"platforms,omitempty"`
+	Env         map[string]string `json:"env,omitempty"`
+	Dir         string            `json:"dir,omitempty"`
 }
 
 func printJSON(scripts map[string]config.ScriptConfig) error {
@@ -69,6 +71,8 @@ func printJSON(scripts map[string]config.ScriptConfig) error {
 			Tags:        s.Tags,
 			Command:     s.Command,
 			Platforms:   s.Platforms,
+			Env:         s.Env,
+			Dir:         s.Dir,
 		})
 	}
 
@@ -93,18 +97,7 @@ func init() {
 
 	if err := listCmd.RegisterFlagCompletionFunc("tag",
 		func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-			cfg, _ := loadCatalog()
-			seen := map[string]bool{}
-			var tags []string
-			for _, script := range cfg.Scripts {
-				for _, t := range script.Tags {
-					if !seen[t] {
-						seen[t] = true
-						tags = append(tags, t)
-					}
-				}
-			}
-			return tags, cobra.ShellCompDirectiveNoFileComp
+			return tagNames(), cobra.ShellCompDirectiveNoFileComp
 		}); err != nil {
 		panic(err)
 	}

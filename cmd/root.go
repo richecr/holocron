@@ -11,10 +11,15 @@ import (
 )
 
 var rootDry bool
+var rootShell string
+
+// version is injected at build time via -ldflags "-X github.com/richecr/holocron/cmd.version=<tag>".
+var version = "dev"
 
 var rootCmd = &cobra.Command{
-	Use:   "hc",
-	Short: "Holocron is a cross-platform script manager",
+	Use:     "hc",
+	Short:   "Holocron is a cross-platform script manager",
+	Version: version,
 	Long: ui.Banner() + `
 
 Holocron (hc) keeps your frequently used commands in a single TOML catalog
@@ -35,7 +40,7 @@ Scripts can be run directly: "hc docker:up" is the same as
 			_ = cmd.Help()
 			return
 		}
-		runScript(args[0], stripDashDash(args[1:]), rootDry)
+		runScript(args[0], stripDashDash(args[1:]), rootDry, rootShell)
 	},
 }
 
@@ -72,7 +77,10 @@ func init() {
 	rootCmd.AddCommand(removeCmd)
 	rootCmd.AddCommand(doctorCmd)
 	rootCmd.AddCommand(configCmd)
+	rootCmd.AddCommand(exportCmd)
+	rootCmd.AddCommand(importCmd)
 
 	rootCmd.Flags().BoolVar(&rootDry, "dry", false, "print the resolved command without running it")
+	rootCmd.Flags().StringVar(&rootShell, "shell", "", "shell for this run (sh, bash, zsh, powershell, cmd); overrides the config")
 	rootCmd.Flags().SetInterspersed(false)
 }

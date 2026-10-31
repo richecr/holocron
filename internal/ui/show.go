@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/richecr/holocron/internal/config"
@@ -14,6 +15,8 @@ func FormatScriptDetail(name string, script config.ScriptConfig, goos, resolved 
 
 	b.WriteString(detailRow("Description", script.Description))
 	b.WriteString(detailRow("Tags", strings.Join(script.Tags, ", ")))
+	b.WriteString(detailRow("Dir", script.Dir))
+	b.WriteString(detailRow("Env", formatEnv(script.Env)))
 
 	b.WriteString("\n")
 	b.WriteString(HeaderStyle.Render("Platforms"))
@@ -46,6 +49,22 @@ func FormatScriptDetail(name string, script config.ScriptConfig, goos, resolved 
 	}
 
 	return strings.TrimRight(b.String(), "\n")
+}
+
+func formatEnv(env map[string]string) string {
+	if len(env) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	pairs := make([]string, 0, len(keys))
+	for _, k := range keys {
+		pairs = append(pairs, k+"="+env[k])
+	}
+	return strings.Join(pairs, "  ")
 }
 
 func detailRow(label, value string) string {

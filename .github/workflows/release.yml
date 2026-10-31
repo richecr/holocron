@@ -37,7 +37,9 @@ jobs:
 
             echo "::group::Building ${name}"
             GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 \
-              go build -trimpath -ldflags "-s -w" -o "dist/hc${ext}" .
+              go build -trimpath \
+              -ldflags "-s -w -X github.com/richecr/holocron/cmd.version=${VERSION}" \
+              -o "dist/hc${ext}" .
 
             mkdir -p "dist/${name}"
             cp "dist/hc${ext}" "dist/${name}/"
@@ -58,6 +60,7 @@ jobs:
           build darwin amd64
           build darwin arm64
           build windows amd64
+          build windows arm64
 
       - name: Generate checksums
         run: |
