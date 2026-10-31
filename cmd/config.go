@@ -32,14 +32,7 @@ var configEditCmd = &cobra.Command{
 	Use:   "edit",
 	Short: "Open config.toml in your default editor",
 	Run: func(cmd *cobra.Command, args []string) {
-		path, err := config.GetConfigPath()
-		if err != nil {
-			fatal("failed to resolve config path: %v", err)
-		}
-
-		if _, err := config.LoadConfig(path); err != nil {
-			fatal("failed to load config: %v", err)
-		}
+		_, path := loadCatalog()
 
 		editor := resolveEditor()
 		c := exec.Command(editor, path)

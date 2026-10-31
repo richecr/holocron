@@ -3,11 +3,12 @@ package ui
 import "github.com/charmbracelet/lipgloss"
 
 const (
-	ColorJedi  = "#00d7ff"
-	ColorSith  = "#ff005f"
-	ColorGold  = "#ffaf00"
-	ColorGray  = "#585858"
-	ColorGreen = "#00ff87"
+	ColorJedi    = "#00d7ff"
+	ColorSith    = "#ff005f"
+	ColorGold    = "#ffaf00"
+	ColorGray    = "#585858"
+	ColorGreen   = "#00ff87"
+	ColorMagenta = "#ff00af"
 )
 
 var (
@@ -54,7 +55,7 @@ func PlatformBadge(platform string) string {
 	case "darwin":
 		return badge("darwin", ColorJedi)
 	case "windows", "win":
-		return badge("win", ColorGreen)
+		return badge("win", ColorMagenta)
 	case "any":
 		return badge("any", ColorGray)
 	default:

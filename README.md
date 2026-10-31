@@ -6,20 +6,32 @@ shell on Linux, macOS and Windows — so `./mvnw clean package`, `docker compose
 up -d` or `rmdir /s /q dist` all live under the same name, no matter the OS.
 
 ```console
-$ hc run build:java -- --debug
-[INFO] Building with debug flags...
-[INFO] BUILD SUCCESS
+$ hc docker:up
+[INFO] Starting core services...
+[INFO] Done.
 ```
 
 ## Features
 
 - **One catalog, every OS** — each script can define a generic command and/or
-  per-platform commands (`linux`, `darwin`, `windows`), resolved automatically at run time.
-- **Live streaming** — `stdout`, `stderr` and `stdin` are wired directly to your
-  terminal, so long builds stream line by line and interactive scripts work.
-- **Argument forwarding** — pass extra flags to any script: `hc run build:java -- --debug`.
-- **Tags & listing** — organize scripts with tags and filter them: `hc list --tag docker`.
-- **Proper exit codes** — if the script fails with exit code `3`, `hc` exits with `3`.
+  per-platform commands (`linux`, `darwin`, `windows`), resolved automatically
+  at run time.
+- **Run it directly** — `hc docker:up` is a shortcut for `hc run docker:up`.
+- **Live streaming** — `stdout`, `stderr` and `stdin` are wired directly to
+  your terminal, so long builds stream line by line and interactive scripts
+  work.
+- **Argument forwarding** — pass extra flags to any script:
+  `hc build:java -- --debug`.
+- **Tags & listing** — organize scripts with tags, filter them
+  (`hc list --tag docker`) or consume the catalog as JSON (`hc list --json`).
+- **Dry run** — preview the resolved command without executing it:
+  `hc --dry build:java`.
+- **Health check** — `hc doctor` validates shells, platforms and empty
+  commands in the catalog.
+- **Proper exit codes** — if the script fails with exit code `3`, `hc` exits
+  with `3`.
+- **Shell completion** — tab-completion for commands, scripts, `--tag` and
+  `--platform` values.
 - **Star Wars flavored UI** — Jedi cyan, Sith red and Holocron gold.
 
 ## Installation
@@ -27,8 +39,8 @@ $ hc run build:java -- --debug
 ### Pre-built binaries
 
 Download the archive for your platform from the
-[GitHub Releases](https://github.com/richecr/holocron/releases) page, extract it
-and put `hc` on your `PATH`:
+[GitHub Releases](https://github.com/richecr/holocron/releases) page, extract
+it and put `hc` on your `PATH`:
 
 ```sh
 # Linux (amd64) example
@@ -36,8 +48,6 @@ curl -LO https://github.com/richecr/holocron/releases/download/v0.1.0/hc_0.1.0_l
 tar -xzf hc_0.1.0_linux_amd64.tar.gz
 sudo mv hc_0.1.0_linux_amd64/hc /usr/local/bin/hc
 ```
-
-Available assets:
 
 | Asset | Platform |
 |---|---|
@@ -60,6 +70,60 @@ make build        # produces ./hc  (or: go build -o hc .)
 sudo mv hc /usr/local/bin/
 ```
 
+### Add `hc` to your `PATH`
+
+The examples above drop the binary in `/usr/local/bin`, which is already on
+your `PATH` — that is all it takes to run plain `hc` instead of
+`<path_to_binary>/hc`. If you prefer a different location, put the binary in
+any directory and add that directory to your `PATH`:
+
+```sh
+# Example: user-writable directory, no sudo needed (Linux/macOS)
+mkdir -p ~/.local/bin
+mv hc ~/.local/bin/
+```
+
+Then make your shell look there:
+
+**bash** — add to `~/.bashrc`:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+**zsh** — add to `~/.zshrc`:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+**fish** — one command, no config editing needed:
+
+```sh
+fish_add_path ~/.local/bin
+```
+
+**PowerShell (Windows)** — add for your user account (no admin needed):
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+  "Path",
+  [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:USERPROFILE\.local\bin",
+  "User"
+)
+```
+
+Alternatively on Windows: *Settings → System → About → Advanced system
+settings → Environment Variables*, then append
+`C:\Users\<you>\.local\bin` to your user `PATH`. Keep the file named
+`hc.exe` — Windows finds it as plain `hc`.
+
+Open a new terminal (or `source ~/.bashrc` / `source ~/.zshrc`) and verify:
+
+```sh
+hc --help
+```
+
 ## Quick start
 
 ```sh
@@ -72,59 +136,247 @@ hc add clean "rmdir /s /q dist" --platform windows
 
 # List everything in the catalog
 hc list
-# NAME         PLATFORMS        DESCRIPTION
-# clean        linux darwin win Remove build output
-# docker:up    any              Start core services
+NAME       PLATFORMS               TAGS      DESCRIPTION
+clean       linux   darwin   win             Remove build output
+docker:up   any                     docker   Start core services
 
 # Run a script (extra args are appended to the command)
-hc run docker:up
-hc run clean
+hc docker:up              # direct execution
+hc run docker:up          # same thing, explicit "run"
+hc --dry docker:up        # preview the resolved command first
 ```
 
-The first `hc` command creates the configuration file automatically (see below).
+The first `hc` command creates the configuration file automatically
+(see [Configuration](#configuration)).
 
 ## Commands
 
-### `hc run <script> [args...]`
+| Command | What it does |
+|---|---|
+| [`hc <script> [args...]`](#hc-run) | Run a script (shortcut for `hc run`) |
+| [`hc run <script> [args...]`](#hc-run) | Run a script from the catalog |
+| [`hc list`](#hc-list) | List the catalog as a table or JSON |
+| [`hc add`](#hc-add) | Add or update a script |
+| [`hc show <name>`](#hc-show) | Show the details of a script |
+| [`hc remove <name>`](#hc-remove) | Remove a script (alias: `hc rm`) |
+| [`hc doctor`](#hc-doctor) | Check the catalog for problems |
+| [`hc config`](#hc-config) | Print or edit the config file path |
+| [`hc completion`](#hc-completion) | Generate shell completion scripts |
 
-Runs a script from the catalog.
+Every command also accepts `--help` (or `-h`) for its own usage text.
 
-- Extra arguments after the script name are appended to the resolved command —
-  `--` is optional: `hc run test -- -v` and `hc run test -v` are equivalent.
-- Streams output live and inherits your terminal's stdin.
-- Propagates the script's exit code.
-- If `confirm_before_run` is enabled, shows the resolved command and asks
-  `Run <command> ? [y/N]` first.
+**How invocation works:**
 
-### `hc list [--tag <tag>]`
+- The `run` keyword is optional: `hc build:java` and `hc run build:java` are
+  equivalent.
+- Built-in commands take precedence over scripts of the same name — a script
+  named `add` would be shadowed by `hc add`.
+- Flags go **before** the script name; everything after it is forwarded to the
+  script (`hc docker:up --verbose` passes `--verbose` to the script).
 
-Renders the catalog as a table (`NAME`, `PLATFORMS`, `DESCRIPTION`).
-Use `--tag` to filter scripts by tag. Scripts with a generic command show the
-`any` badge; platform-specific scripts show one badge per OS.
+### `hc run`
 
-### `hc add <name> "<command>"`
+```sh
+hc run <script> [args...]
+hc <script> [args...]
+```
 
-Adds or updates a script in the catalog.
+Runs a script from the catalog, resolving the command for the current OS and
+executing it in the configured shell.
 
 | Flag | Description |
 |---|---|
-| `--desc "..."` | Script description |
-| `--platform <os>` | Store the command for this OS (`linux`, `darwin`, `windows`). Repeatable |
-| `--tags a,b` | Comma-separated tags |
+| `--dry` | Print the resolved command (including forwarded args) instead of running it |
 
-Without `--platform`, the command is stored as the generic fallback (`command`).
-With one or more `--platform` flags, it is stored under `platforms["<os>"]`.
+```sh
+$ hc --dry build:java -- --debug
+./mvnw clean package --debug
 
-Calling `hc add` again for an existing script **merges**: platform commands are
-added or updated per OS (e.g. one call for `linux`/`darwin` and another for
-`windows`), while description and tags only change when `--desc`/`--tags` are
-passed. To replace a script entirely, edit it with `hc config edit`.
+$ hc build:java -- --debug        # actually run it
+```
 
-### `hc config [path|edit]`
+Behavior:
 
-- `hc config` or `hc config path` — prints the absolute path of `config.toml`.
-- `hc config edit` — opens `config.toml` in `$VISUAL` / `$EDITOR`
-  (falls back to `notepad` on Windows, `nano` elsewhere).
+- Extra arguments after the script name are appended to the resolved command —
+  the `--` separator is optional: `hc test -- -v` and `hc test -v` are
+  equivalent.
+- Output is streamed live and the script inherits your terminal's stdin, so
+  interactive scripts work.
+- The script's exit code is propagated: a script failing with `3` makes
+  `hc` exit with `3`.
+- If `confirm_before_run` is enabled in the config, Holocron shows the
+  resolved command and asks `Run <command> ? [y/N]` before executing.
+- Typos get suggestions:
+  `hc buld:java` → `script not found: buld:java (did you mean build:java?)`.
+
+### `hc list`
+
+```sh
+hc list [--tag <tag>] [--json]
+```
+
+Renders the catalog as a table with the columns `NAME`, `PLATFORMS`, `TAGS`
+and `DESCRIPTION`. Scripts with a generic command show the `any` badge;
+platform-specific scripts show one badge per OS.
+
+| Flag | Description |
+|---|---|
+| `--tag <tag>` | Only show scripts carrying this tag |
+| `--json` | Print the catalog as a JSON array (for scripting, e.g. `\| jq`) |
+
+```sh
+$ hc list --tag docker
+NAME       PLATFORMS  TAGS      DESCRIPTION
+docker:up   any        docker   Start core services
+
+$ hc list --json
+[
+  {
+    "name": "docker:up",
+    "description": "Start core services",
+    "tags": [
+      "docker"
+    ],
+    "command": "docker compose up -d"
+  }
+]
+
+$ hc list --json | jq -r '.[].name'
+clean
+docker:up
+```
+
+### `hc add`
+
+```sh
+hc add <name> "<command>" [--desc "..."] [--platform <os>]... [--tags a,b]
+```
+
+Adds a script to the catalog, or updates an existing one.
+
+| Flag | Description |
+|---|---|
+| `--desc "..."` | Set the script description |
+| `--platform <os>` | Store the command for this OS (`linux`, `darwin`, `windows`). Repeat the flag for multiple OSes |
+| `--tags a,b` | Comma-separated list of tags (replaces existing tags) |
+
+- Without `--platform`, the command is stored as the generic fallback
+  (`command`), valid on every OS.
+- With one or more `--platform` flags, the command is stored under
+  `platforms["<os>"]` instead.
+- Calling `hc add` again for an existing script **merges**: platform commands
+  are added or updated per OS (e.g. one call for `linux`/`darwin` and another
+  for `windows`), while description and tags only change when `--desc` /
+  `--tags` are passed. To replace a script entirely, edit it with
+  `hc config edit`.
+
+```sh
+$ hc add docker:up "docker compose up -d" --tags docker
+Saved docker:up  any
+```
+
+The badges show where the command was stored: `any` for the generic command,
+or one badge per OS.
+
+### `hc show`
+
+```sh
+hc show <name>
+```
+
+Shows the details of one script: description, tags, the generic and
+per-platform commands, and the command that would be resolved on the current
+OS.
+
+```sh
+$ hc show clean
+clean
+
+  Description   Remove build output
+  Tags
+
+Platforms
+   linux   rm -rf dist/
+   darwin  rm -rf dist/
+   win     rmdir /s /q dist
+
+  On this OS (linux)  rm -rf dist/
+```
+
+Like `hc run`, misspelling the name prints a "did you mean" suggestion.
+
+### `hc remove`
+
+```sh
+hc remove <name>    # or: hc rm <name>
+```
+
+Removes a script from the catalog.
+
+```sh
+$ hc remove docker:up
+Removed docker:up
+```
+
+### `hc doctor`
+
+```sh
+hc doctor
+```
+
+Validates the catalog and reports problems:
+
+| Check | Severity |
+|---|---|
+| Invalid shell in `settings.default_shell` (accepted: `sh`, `bash`, `zsh`, `powershell`, `cmd`) | error |
+| Script with no `command` and no `platforms` | error |
+| Empty per-platform command | error |
+| Unknown platform key (e.g. `windwos`) | warning |
+
+Warnings do not fail the check; errors exit with code `1`.
+
+```sh
+$ hc doctor
+OK 2 scripts, no issues found
+
+$ hc doctor
+error scripts."broken": no command and no platforms defined
+warning scripts."typo-os".platforms: unknown platform "windwos" (expected linux, darwin or windows)
+1 error(s), 1 warning(s)
+```
+
+### `hc config`
+
+```sh
+hc config          # print the absolute path of config.toml
+hc config path     # same as above
+hc config edit     # open config.toml in your editor
+```
+
+`config edit` uses `$VISUAL`, then `$EDITOR`, falling back to `notepad` on
+Windows and `nano` elsewhere.
+
+### `hc completion`
+
+```sh
+hc completion bash
+hc completion zsh
+hc completion fish
+hc completion powershell
+```
+
+Generates a completion script for the given shell. Install it in your shell's
+completion directory to get tab-completion for:
+
+- all built-in commands and catalog script names (`hc <TAB>`),
+- `--tag` values on `hc list`,
+- `--platform` values on `hc add`.
+
+For example, with bash:
+
+```sh
+hc completion bash | sudo tee /etc/bash_completion.d/hc > /dev/null
+```
 
 ## Configuration
 
@@ -136,7 +388,10 @@ The catalog lives in a single TOML file:
 | macOS | `~/Library/Application Support/holocron/config.toml` |
 | Windows | `%APPDATA%\holocron\config.toml` |
 
-> Paths follow `os.UserConfigDir()` (e.g. `$XDG_CONFIG_HOME` is respected on Linux).
+> Paths follow `os.UserConfigDir()` (e.g. `$XDG_CONFIG_HOME` is respected on
+> Linux).
+
+The file is created automatically with defaults on first run.
 
 ### Full example
 
@@ -190,7 +445,8 @@ When a script runs, Holocron picks the command in this order:
 The shell used to execute the command is chosen in this order:
 
 1. `settings.default_shell[<current OS>]`, if set.
-2. OS default: `/bin/sh -c` on Linux/macOS, `powershell.exe -NoProfile -Command` on Windows.
+2. OS default: `/bin/sh -c` on Linux/macOS,
+   `powershell.exe -NoProfile -Command` on Windows.
 
 ## Development
 
@@ -208,5 +464,3 @@ CI runs on every pull request (`.github/workflows/ci.yml`): `gofmt` check,
 `go vet`, `golangci-lint` and `go test -race`. Releases
 (`.github/workflows/release.yml`) build binaries for Linux, macOS and Windows
 and attach them to the GitHub release.
-
-See [PLAN.md](PLAN.md) for the implementation plan.

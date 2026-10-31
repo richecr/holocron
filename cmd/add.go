@@ -32,25 +32,19 @@ updated per OS; description and tags only change when the flags are passed.`,
 		name := args[0]
 		command := args[1]
 
-		path, err := config.GetConfigPath()
-		if err != nil {
-			fatal("failed to resolve config path: %v", err)
-		}
-
-		cfg, err := config.LoadConfig(path)
-		if err != nil {
-			fatal("failed to load config: %v", err)
-		}
+		cfg, path := loadCatalog()
 
 		cfg.Scripts[name] = mergeScript(cfg.Scripts[name], command, addDesc, addPlatforms, addTags)
 
-		if err := config.SaveConfig(path, cfg); err != nil {
+		if err := saveCatalog(path, cfg); err != nil {
 			fatal("failed to save config: %v", err)
 		}
 
-		fmt.Printf("%s %s\n",
+		saved := cfg.Scripts[name]
+		fmt.Printf("%s %s %s\n",
 			ui.SuccessStyle.Render("Saved"),
 			ui.ScriptNameStyle.Render(name),
+			ui.PlatformBadges(saved),
 		)
 	},
 }
@@ -83,4 +77,11 @@ func init() {
 	addCmd.Flags().StringVar(&addDesc, "desc", "", "script description")
 	addCmd.Flags().StringSliceVar(&addPlatforms, "platform", nil, "target platform (linux, darwin, windows); repeatable")
 	addCmd.Flags().StringSliceVar(&addTags, "tags", nil, "comma-separated tags (e.g. java,build)")
+
+	if err := addCmd.RegisterFlagCompletionFunc("platform",
+		func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			return []string{"linux", "darwin", "windows"}, cobra.ShellCompDirectiveNoFileComp
+		}); err != nil {
+		panic(err)
+	}
 }

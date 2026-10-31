@@ -49,14 +49,23 @@ func buildInvocation(shell, flag, commandStr string) []string {
 	return []string{flag, commandStr}
 }
 
-func Run(script config.ScriptConfig, settings config.Settings, extraArgs []string) error {
+func BuildCommand(script config.ScriptConfig, extraArgs []string) (string, error) {
 	commandStr, err := ResolveCommand(script)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if len(extraArgs) > 0 {
 		commandStr = commandStr + " " + strings.Join(extraArgs, " ")
+	}
+
+	return commandStr, nil
+}
+
+func Run(script config.ScriptConfig, settings config.Settings, extraArgs []string) error {
+	commandStr, err := BuildCommand(script, extraArgs)
+	if err != nil {
+		return err
 	}
 
 	shell, flag := selectShell(settings, runtime.GOOS)
