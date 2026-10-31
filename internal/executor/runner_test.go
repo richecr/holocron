@@ -81,6 +81,62 @@ func TestResolveCommandPriority(t *testing.T) {
 	}
 }
 
+func TestBuildCommand(t *testing.T) {
+	goos := runtime.GOOS
+
+	tests := []struct {
+		name      string
+		script    config.ScriptConfig
+		extraArgs []string
+		want      string
+		wantErr   bool
+	}{
+		{
+			name:   "resolves without extra args",
+			script: config.ScriptConfig{Command: "echo hi"},
+			want:   "echo hi",
+		},
+		{
+			name:      "appends extra args",
+			script:    config.ScriptConfig{Command: "echo hi"},
+			extraArgs: []string{"--verbose", "x"},
+			want:      "echo hi --verbose x",
+		},
+		{
+			name: "prefers platform command",
+			script: config.ScriptConfig{
+				Command:   "generic",
+				Platforms: map[string]string{goos: "platform"},
+			},
+			extraArgs: []string{"--flag"},
+			want:      "platform --flag",
+		},
+		{
+			name:    "error when nothing resolves",
+			script:  config.ScriptConfig{},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := BuildCommand(tt.script, tt.extraArgs)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("BuildCommand() = %q, want error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("BuildCommand() error = %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("BuildCommand() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSelectShell(t *testing.T) {
 	tests := []struct {
 		name     string

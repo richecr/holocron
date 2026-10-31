@@ -78,6 +78,10 @@ func stripANSI(s string) string {
 }
 
 func sortedNames(scripts map[string]config.ScriptConfig) []string {
+	return ScriptNames(scripts)
+}
+
+func ScriptNames(scripts map[string]config.ScriptConfig) []string {
 	names := make([]string, 0, len(scripts))
 	for name := range scripts {
 		names = append(names, name)
@@ -125,11 +129,23 @@ func RenderScriptTable(scripts map[string]config.ScriptConfig) string {
 		rows = append(rows, []string{
 			ScriptNameStyle.Render(name),
 			PlatformBadges(script),
+			TagBadges(script.Tags),
 			script.Description,
 		})
 	}
 
-	return renderTable([]string{"NAME", "PLATFORMS", "DESCRIPTION"}, rows)
+	return renderTable([]string{"NAME", "PLATFORMS", "TAGS", "DESCRIPTION"}, rows)
+}
+
+func TagBadges(tags []string) string {
+	if len(tags) == 0 {
+		return ""
+	}
+	badges := make([]string, 0, len(tags))
+	for _, t := range tags {
+		badges = append(badges, badge(t, ColorGold))
+	}
+	return strings.Join(badges, " ")
 }
 
 func FormatPath(path string) string {
