@@ -52,9 +52,9 @@ it and put `hc` on your `PATH`:
 
 ```sh
 # Linux (amd64) example
-curl -LO https://github.com/richecr/holocron/releases/download/v0.3.0/hc_0.3.0_linux_amd64.tar.gz
-tar -xzf hc_0.3.0_linux_amd64.tar.gz
-sudo mv hc_0.3.0_linux_amd64/hc /usr/local/bin/hc
+curl -LO https://github.com/richecr/holocron/releases/download/v0.4.0/hc_0.4.0_linux_amd64.tar.gz
+tar -xzf hc_0.4.0_linux_amd64.tar.gz
+sudo mv hc_0.4.0_linux_amd64/hc /usr/local/bin/hc
 ```
 
 | Asset | Platform |
