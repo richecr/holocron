@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateCleanConfig(t *testing.T) {
 	cfg := &Config{
@@ -85,5 +88,57 @@ func TestValidateUnknownPlatformIsWarning(t *testing.T) {
 	}
 	if issues[0].Severity != "warning" {
 		t.Errorf("severity = %q, want warning", issues[0].Severity)
+	}
+}
+
+func TestValidatePreRunUnknownReference(t *testing.T) {
+	cfg := &Config{
+		Scripts: map[string]ScriptConfig{
+			"deploy": {Command: "ship", PreRun: []string{"ghost"}},
+		},
+	}
+
+	issues := Validate(cfg)
+	found := false
+	for _, issue := range issues {
+		if issue.Severity == "error" && strings.Contains(issue.Message, "ghost") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Validate() = %v, want error mentioning ghost", issues)
+	}
+}
+
+func TestValidatePreRunCycle(t *testing.T) {
+	cfg := &Config{
+		Scripts: map[string]ScriptConfig{
+			"a": {Command: "a", PreRun: []string{"b"}},
+			"b": {Command: "b", PreRun: []string{"a"}},
+		},
+	}
+
+	issues := Validate(cfg)
+	found := false
+	for _, issue := range issues {
+		if issue.Severity == "error" && strings.Contains(issue.Message, "cycle") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Validate() = %v, want cycle error", issues)
+	}
+}
+
+func TestValidatePreRunValid(t *testing.T) {
+	cfg := &Config{
+		Scripts: map[string]ScriptConfig{
+			"deploy": {Command: "ship", PreRun: []string{"test"}},
+			"test":   {Command: "go test"},
+		},
+	}
+
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Errorf("Validate() = %v, want no issues", issues)
 	}
 }

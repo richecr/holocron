@@ -121,6 +121,57 @@ func PlatformBadges(script config.ScriptConfig) string {
 }
 
 func RenderScriptTable(scripts map[string]config.ScriptConfig) string {
+	return renderTable(
+		[]string{"NAME", "PLATFORMS", "TAGS", "DESCRIPTION"},
+		scriptRows(scripts),
+	)
+}
+
+// RenderScriptTableGrouped renders the catalog grouped by tag. Scripts with
+// no tags appear under "(untagged)"; scripts with several tags appear under
+// each of their tags.
+func RenderScriptTableGrouped(scripts map[string]config.ScriptConfig) string {
+	groups := map[string]map[string]config.ScriptConfig{}
+	for name, script := range scripts {
+		if len(script.Tags) == 0 {
+			addToGroup(groups, "(untagged)", name, script)
+			continue
+		}
+		for _, tag := range script.Tags {
+			addToGroup(groups, tag, name, script)
+		}
+	}
+
+	var b strings.Builder
+	for i, tag := range sortedGroupNames(groups) {
+		if i > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString(HeaderStyle.Render(tag))
+		b.WriteString("\n")
+		b.WriteString(RenderScriptTable(groups[tag]))
+	}
+
+	return b.String()
+}
+
+func addToGroup(groups map[string]map[string]config.ScriptConfig, tag, name string, script config.ScriptConfig) {
+	if groups[tag] == nil {
+		groups[tag] = map[string]config.ScriptConfig{}
+	}
+	groups[tag][name] = script
+}
+
+func sortedGroupNames(groups map[string]map[string]config.ScriptConfig) []string {
+	names := make([]string, 0, len(groups))
+	for tag := range groups {
+		names = append(names, tag)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func scriptRows(scripts map[string]config.ScriptConfig) [][]string {
 	names := sortedNames(scripts)
 	rows := make([][]string, 0, len(names))
 
@@ -134,7 +185,7 @@ func RenderScriptTable(scripts map[string]config.ScriptConfig) string {
 		})
 	}
 
-	return renderTable([]string{"NAME", "PLATFORMS", "TAGS", "DESCRIPTION"}, rows)
+	return rows
 }
 
 func TagBadges(tags []string) string {

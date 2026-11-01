@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/richecr/holocron/internal/config"
 	"github.com/richecr/holocron/internal/executor"
 	"github.com/richecr/holocron/internal/ui"
 )
@@ -38,13 +39,22 @@ appended to the resolved command, e.g.:
 func runScript(scriptName string, extraArgs []string, dry bool, shellOverride string) {
 	cfg, _ := loadCatalog()
 
-	script, ok := cfg.Scripts[scriptName]
-	if !ok {
+	if _, ok := cfg.Scripts[scriptName]; !ok {
 		fatal("%s", notFoundError("script", scriptName, ui.ScriptNames(cfg.Scripts)))
 	}
 
+	chain, err := executor.ResolveRunChain(cfg.Scripts, scriptName)
+	if err != nil {
+		fatal("%v", err)
+	}
+
+	main := cfg.Scripts[scriptName]
+
 	if dry {
-		resolved, err := executor.BuildCommand(script, extraArgs)
+		if len(chain) > 1 {
+			fmt.Println(ui.MutedStyle.Render("chain: " + strings.Join(chain, " -> ")))
+		}
+		resolved, err := executor.BuildCommand(main, extraArgs)
 		if err != nil {
 			fatal("%v", err)
 		}
@@ -52,12 +62,14 @@ func runScript(scriptName string, extraArgs []string, dry bool, shellOverride st
 		return
 	}
 
-	resolved, err := executor.ResolveCommand(script)
-	if err != nil {
-		fatal("%v", err)
-	}
-
 	if cfg.Settings.ConfirmBeforeRun {
+		resolved, err := executor.ResolveCommand(main)
+		if err != nil {
+			fatal("%v", err)
+		}
+		if len(chain) > 1 {
+			fmt.Println(ui.MutedStyle.Render("chain: " + strings.Join(chain, " -> ")))
+		}
 		fmt.Println(ui.PromptConfirm(ui.FormatScriptCommand(resolved)))
 		reader := bufio.NewReader(os.Stdin)
 		answer, _ := reader.ReadString('\n')
@@ -68,7 +80,16 @@ func runScript(scriptName string, extraArgs []string, dry bool, shellOverride st
 		}
 	}
 
-	if err := executor.Run(script, cfg.Settings, extraArgs, shellOverride); err != nil {
+	for _, name := range chain[:len(chain)-1] {
+		fmt.Println(ui.MutedStyle.Render("pre: " + name))
+		runOne(cfg.Scripts[name], cfg.Settings, nil, shellOverride)
+	}
+
+	runOne(main, cfg.Settings, extraArgs, shellOverride)
+}
+
+func runOne(script config.ScriptConfig, settings config.Settings, extraArgs []string, shellOverride string) {
+	if err := executor.Run(script, settings, extraArgs, shellOverride); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			os.Exit(exitErr.ExitCode())

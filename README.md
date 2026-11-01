@@ -26,6 +26,10 @@ $ hc docker:up
   (`hc list --tag docker`) or consume the catalog as JSON (`hc list --json`).
 - **Env vars & working dir** — each script can set its own environment
   variables and working directory in the TOML catalog.
+- **Chained scripts** — a script can declare `pre_run` dependencies that run
+  before it (cycle-safe): `hc deploy` runs `clean` first.
+- **Search** — find scripts anywhere in names, descriptions, tags and
+  commands: `hc search mvnw`.
 - **Import & export** — back up, version in git, or sync catalogs between
   machines: `hc export > catalog.toml` / `hc import catalog.toml`.
 - **Dry run** — preview the resolved command without executing it:
@@ -48,9 +52,9 @@ it and put `hc` on your `PATH`:
 
 ```sh
 # Linux (amd64) example
-curl -LO https://github.com/richecr/holocron/releases/download/v0.3.0/hc_0.3.0_linux_amd64.tar.gz
-tar -xzf hc_0.3.0_linux_amd64.tar.gz
-sudo mv hc_0.3.0_linux_amd64/hc /usr/local/bin/hc
+curl -LO https://github.com/richecr/holocron/releases/download/v0.4.0/hc_0.4.0_linux_amd64.tar.gz
+tar -xzf hc_0.4.0_linux_amd64.tar.gz
+sudo mv hc_0.4.0_linux_amd64/hc /usr/local/bin/hc
 ```
 
 | Asset | Platform |
@@ -164,7 +168,9 @@ The first `hc` command creates the configuration file automatically
 | [`hc add`](#hc-add) | Add or update a script |
 | [`hc show <name>`](#hc-show) | Show the details of a script |
 | [`hc remove <name>`](#hc-remove) | Remove a script (alias: `hc rm`) |
+| [`hc search <term>`](#hc-search) | Search scripts by name, description, tag or command |
 | [`hc doctor`](#hc-doctor) | Check the catalog for problems |
+| [`hc init`](#hc-init) | Create a starter catalog with example scripts |
 | [`hc config`](#hc-config) | Print or edit the config file path |
 | [`hc export`](#hc-export) | Export the catalog as TOML |
 | [`hc import`](#hc-import) | Import scripts from a TOML file |
@@ -219,11 +225,16 @@ Behavior:
   `hc buld:java` → `script not found: buld:java (did you mean build:java?)`.
 - Scripts with `env` / `dir` run with those environment variables and in that
   working directory (see [Configuration](#configuration)).
+- Scripts with `pre_run` run their dependencies first, in order, each at most
+  once: `hc deploy` with `pre_run = ["clean", "test"]` prints
+  `pre: clean`, `pre: test` and then runs `deploy`. A failing dependency
+  aborts the chain (its exit code is propagated). Unknown references and
+  cycles are rejected before anything runs.
 
 ### `hc list`
 
 ```sh
-hc list [--tag <tag>] [--json]
+hc list [--tag <tag>] [--group tag] [--json]
 ```
 
 Renders the catalog as a table with the columns `NAME`, `PLATFORMS`, `TAGS`
@@ -233,12 +244,22 @@ platform-specific scripts show one badge per OS.
 | Flag | Description |
 |---|---|
 | `--tag <tag>` | Only show scripts carrying this tag |
+| `--group tag` | Group rows by tag (a script with several tags appears under each; untagged scripts under `(untagged)`) |
 | `--json` | Print the catalog as a JSON array (for scripting, e.g. `\| jq`) |
 
 ```sh
 $ hc list --tag docker
 NAME       PLATFORMS  TAGS      DESCRIPTION
 docker:up   any        docker   Start core services
+
+$ hc list --group tag
+build
+NAME        PLATFORMS   TAGS     DESCRIPTION
+build:java   any         java     Build Java
+
+docker
+NAME       PLATFORMS   TAGS      DESCRIPTION
+docker:up   any         docker   Start core services
 
 $ hc list --json
 [
@@ -260,7 +281,7 @@ docker:up
 ### `hc add`
 
 ```sh
-hc add <name> "<command>" [--desc "..."] [--platform <os>]... [--tags a,b]
+hc add <name> "<command>" [--desc "..."] [--platform <os>]... [--tags a,b] [--pre x,y]
 ```
 
 Adds a script to the catalog, or updates an existing one.
@@ -270,6 +291,7 @@ Adds a script to the catalog, or updates an existing one.
 | `--desc "..."` | Set the script description |
 | `--platform <os>` | Store the command for this OS (`linux`, `darwin`, `windows`). Repeat the flag for multiple OSes |
 | `--tags a,b` | Comma-separated list of tags (replaces existing tags) |
+| `--pre x,y` | Comma-separated `pre_run` scripts, in order (replaces existing; pass `--pre ""` to clear). A warning is printed if a referenced script does not exist yet |
 
 - Without `--platform`, the command is stored as the generic fallback
   (`command`), valid on every OS.
@@ -277,13 +299,16 @@ Adds a script to the catalog, or updates an existing one.
   `platforms["<os>"]` instead.
 - Calling `hc add` again for an existing script **merges**: platform commands
   are added or updated per OS (e.g. one call for `linux`/`darwin` and another
-  for `windows`), while description and tags only change when `--desc` /
-  `--tags` are passed. To replace a script entirely, edit it with
-  `hc config edit`.
+  for `windows`), while description, tags and `pre_run` only change when
+  `--desc` / `--tags` / `--pre` are passed. To replace a script entirely,
+  edit it with `hc config edit`.
 
 ```sh
 $ hc add docker:up "docker compose up -d" --tags docker
 Saved docker:up  any
+
+$ hc add deploy "./ship.sh" --pre test,clean
+Saved deploy  any
 ```
 
 The badges show where the command was stored: `any` for the generic command,
@@ -329,6 +354,25 @@ $ hc remove docker:up
 Removed docker:up
 ```
 
+### `hc search`
+
+```sh
+hc search <term> [--json]
+```
+
+Case-insensitive search across script **names, descriptions, tags, commands
+(generic and per-platform) and `dir`**. Results are shown in the same table
+as `hc list`; `--json` prints them as a JSON array.
+
+```sh
+$ hc search mvnw
+NAME        PLATFORMS   TAGS            DESCRIPTION
+build:java   any         java   build   Build the Java project
+
+$ hc search docker
+No scripts match docker     # when nothing matches
+```
+
 ### `hc doctor`
 
 ```sh
@@ -342,6 +386,8 @@ Validates the catalog and reports problems:
 | Invalid shell in `settings.default_shell` (accepted: `sh`, `bash`, `zsh`, `powershell`, `cmd`) | error |
 | Script with no `command` and no `platforms` | error |
 | Empty per-platform command | error |
+| `pre_run` referencing an unknown script | error |
+| `pre_run` cycle (e.g. `a -> b -> a`) | error |
 | Unknown platform key (e.g. `windwos`) | warning |
 
 Warnings do not fail the check; errors exit with code `1`.
@@ -354,6 +400,32 @@ $ hc doctor
 error scripts."broken": no command and no platforms defined
 warning scripts."typo-os".platforms: unknown platform "windwos" (expected linux, darwin or windows)
 1 error(s), 1 warning(s)
+```
+
+### `hc init`
+
+```sh
+hc init [--yes]
+```
+
+Creates a starter catalog: if the config file does not exist yet it is
+created; if it exists but is empty, three harmless example scripts are added
+(never overwriting scripts you already have):
+
+- `hello` — generic command, sanity check
+- `clean` — per-platform command
+- `deploy` — demonstrates `pre_run` chaining (`clean` runs first)
+
+Asks for confirmation before seeding; pass `--yes` to skip the prompt.
+
+```sh
+$ hc init --yes
+Initialized 3 example script(s) in ~/.config/holocron/config.toml
+
+Next steps:
+  hc list                 see the catalog
+  hc hello                run the first example
+  hc add my:script "echo hi"   add your own
 ```
 
 ### `hc config`
@@ -486,6 +558,19 @@ windows = ".\\mvnw.cmd clean package"
 # Optional per-script environment: added on top of your environment.
 [scripts."build:java".env]
 MAVEN_OPTS = "-Xmx1g"
+
+# Optional: scripts to run before this one (in list order, each at most once).
+# hc deploy runs test, then clean, then deploy. Cycles are rejected.
+[scripts."deploy"]
+description = "Run tests, then ship"
+command = "./ship.sh"
+pre_run = ["test", "clean"]
+
+[scripts."test"]
+command = "./mvnw test"
+
+[scripts."clean"]
+command = "rm -rf dist/"
 ```
 
 ### Command resolution

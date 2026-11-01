@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	listTag  string
-	listJSON bool
+	listTag   string
+	listJSON  bool
+	listGroup string
 )
 
 var listCmd = &cobra.Command{
@@ -22,6 +23,7 @@ var listCmd = &cobra.Command{
 	Short: "List all scripts in the catalog",
 	Example: `  hc list
   hc list --tag docker
+  hc list --group tag
   hc list --json | jq '.[].name'`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg, _ := loadCatalog()
@@ -47,6 +49,14 @@ var listCmd = &cobra.Command{
 			return
 		}
 
+		if listGroup != "" {
+			if listGroup != "tag" {
+				fatal("unsupported --group value %q (accepted: tag)", listGroup)
+			}
+			fmt.Println(ui.RenderScriptTableGrouped(scripts))
+			return
+		}
+
 		fmt.Println(ui.RenderScriptTable(scripts))
 	},
 }
@@ -59,6 +69,7 @@ type jsonScript struct {
 	Platforms   map[string]string `json:"platforms,omitempty"`
 	Env         map[string]string `json:"env,omitempty"`
 	Dir         string            `json:"dir,omitempty"`
+	PreRun      []string          `json:"pre_run,omitempty"`
 }
 
 func printJSON(scripts map[string]config.ScriptConfig) error {
@@ -73,6 +84,7 @@ func printJSON(scripts map[string]config.ScriptConfig) error {
 			Platforms:   s.Platforms,
 			Env:         s.Env,
 			Dir:         s.Dir,
+			PreRun:      s.PreRun,
 		})
 	}
 
@@ -94,10 +106,18 @@ func filterByTag(scripts map[string]config.ScriptConfig, tag string) map[string]
 func init() {
 	listCmd.Flags().StringVar(&listTag, "tag", "", "filter scripts by tag")
 	listCmd.Flags().BoolVar(&listJSON, "json", false, "output the catalog as JSON")
+	listCmd.Flags().StringVar(&listGroup, "group", "", "group rows by \"tag\"")
 
 	if err := listCmd.RegisterFlagCompletionFunc("tag",
 		func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 			return tagNames(), cobra.ShellCompDirectiveNoFileComp
+		}); err != nil {
+		panic(err)
+	}
+
+	if err := listCmd.RegisterFlagCompletionFunc("group",
+		func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			return []string{"tag"}, cobra.ShellCompDirectiveNoFileComp
 		}); err != nil {
 		panic(err)
 	}

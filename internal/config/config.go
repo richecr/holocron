@@ -26,6 +26,7 @@ type ScriptConfig struct {
 	Platforms   map[string]string `toml:"platforms,omitempty"`
 	Env         map[string]string `toml:"env,omitempty"`
 	Dir         string            `toml:"dir,omitempty"`
+	PreRun      []string          `toml:"pre_run,omitempty"`
 }
 
 func DefaultConfig() *Config {

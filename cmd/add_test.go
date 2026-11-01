@@ -7,7 +7,7 @@ import (
 )
 
 func TestMergeScriptNew(t *testing.T) {
-	got := mergeScript(config.ScriptConfig{}, "echo hi", "desc", nil, []string{"util"})
+	got := mergeScript(config.ScriptConfig{}, "echo hi", "desc", nil, []string{"util"}, nil)
 
 	if got.Command != "echo hi" {
 		t.Errorf("Command = %q, want %q", got.Command, "echo hi")
@@ -24,8 +24,8 @@ func TestMergeScriptNew(t *testing.T) {
 }
 
 func TestMergeScriptPlatformsMerges(t *testing.T) {
-	s := mergeScript(config.ScriptConfig{}, "rm -rf dist/", "", []string{"linux", "darwin"}, nil)
-	s = mergeScript(s, "rmdir /s /q dist", "", []string{"windows"}, nil)
+	s := mergeScript(config.ScriptConfig{}, "rm -rf dist/", "", []string{"linux", "darwin"}, nil, nil)
+	s = mergeScript(s, "rmdir /s /q dist", "", []string{"windows"}, nil, nil)
 
 	if len(s.Platforms) != 3 {
 		t.Fatalf("Platforms = %v, want 3 entries", s.Platforms)
@@ -48,7 +48,7 @@ func TestMergeScriptKeepsExisting(t *testing.T) {
 		Tags:        []string{"a", "b"},
 	}
 
-	got := mergeScript(existing, "new", "", nil, nil)
+	got := mergeScript(existing, "new", "", nil, nil, nil)
 
 	if got.Description != "original desc" {
 		t.Errorf("Description = %q, want %q", got.Description, "original desc")
@@ -69,7 +69,7 @@ func TestMergeScriptReplacesFlags(t *testing.T) {
 		Platforms:   map[string]string{"linux": "old-linux"},
 	}
 
-	got := mergeScript(existing, "new-linux", "new desc", []string{"linux"}, []string{"new-tag"})
+	got := mergeScript(existing, "new-linux", "new desc", []string{"linux"}, []string{"new-tag"}, nil)
 
 	if got.Description != "new desc" {
 		t.Errorf("Description = %q, want %q", got.Description, "new desc")
@@ -83,9 +83,47 @@ func TestMergeScriptReplacesFlags(t *testing.T) {
 }
 
 func TestMergeScriptNormalizesPlatform(t *testing.T) {
-	got := mergeScript(config.ScriptConfig{}, "cmd", "", []string{" Linux "}, nil)
+	got := mergeScript(config.ScriptConfig{}, "cmd", "", []string{" Linux "}, nil, nil)
 
 	if _, ok := got.Platforms["linux"]; !ok {
 		t.Errorf("Platforms = %v, want key %q", got.Platforms, "linux")
+	}
+}
+
+func TestMergeScriptPreRun(t *testing.T) {
+	got := mergeScript(config.ScriptConfig{}, "echo hi", "", nil, nil, []string{"test", "clean"})
+
+	if len(got.PreRun) != 2 || got.PreRun[0] != "test" || got.PreRun[1] != "clean" {
+		t.Errorf("PreRun = %v, want [test clean]", got.PreRun)
+	}
+}
+
+func TestMergeScriptPreRunKeepsExistingWhenFlagAbsent(t *testing.T) {
+	existing := config.ScriptConfig{Command: "old", PreRun: []string{"keep-me"}}
+
+	got := mergeScript(existing, "new", "", nil, nil, nil)
+
+	if len(got.PreRun) != 1 || got.PreRun[0] != "keep-me" {
+		t.Errorf("PreRun = %v, want [keep-me]", got.PreRun)
+	}
+}
+
+func TestMergeScriptPreRunReplacesWhenPassed(t *testing.T) {
+	existing := config.ScriptConfig{Command: "old", PreRun: []string{"a", "b"}}
+
+	got := mergeScript(existing, "new", "", nil, nil, []string{"c"})
+
+	if len(got.PreRun) != 1 || got.PreRun[0] != "c" {
+		t.Errorf("PreRun = %v, want [c]", got.PreRun)
+	}
+}
+
+func TestMergeScriptPreRunClearWithEmpty(t *testing.T) {
+	existing := config.ScriptConfig{Command: "old", PreRun: []string{"a"}}
+
+	got := mergeScript(existing, "new", "", nil, nil, []string{""})
+
+	if got.PreRun != nil {
+		t.Errorf("PreRun = %v, want nil", got.PreRun)
 	}
 }

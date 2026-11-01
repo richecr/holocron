@@ -111,3 +111,32 @@ func TestFormatScriptDetailNoCommand(t *testing.T) {
 		t.Errorf("FormatScriptDetail() missing warning in:\n%s", out)
 	}
 }
+
+func TestRenderScriptTableGrouped(t *testing.T) {
+	scripts := map[string]config.ScriptConfig{
+		"docker:up": {Command: "docker compose up -d", Tags: []string{"docker"}},
+		"build:java": {
+			Description: "Build Java",
+			Tags:        []string{"java", "build"},
+			Platforms:   map[string]string{"linux": "./mvnw package"},
+		},
+		"orphan": {Command: "echo hi"},
+	}
+
+	out := RenderScriptTableGrouped(scripts)
+
+	for _, want := range []string{"build", "docker", "java", "(untagged)", "build:java", "docker:up", "orphan"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("RenderScriptTableGrouped() missing %q in:\n%s", want, out)
+		}
+	}
+
+	// build:java has two tags: it must appear under both groups.
+	if strings.Count(out, "build:java") != 2 {
+		t.Errorf("build:java should appear in both tag groups:\n%s", out)
+	}
+	// Group headers are sorted: build < docker < java < (untagged is also sorted by name)
+	if strings.Index(out, "\nbuild") > strings.Index(out, "\ndocker") {
+		t.Errorf("groups not sorted:\n%s", out)
+	}
+}

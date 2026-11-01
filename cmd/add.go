@@ -14,6 +14,7 @@ var (
 	addDesc      string
 	addPlatforms []string
 	addTags      []string
+	addPre       []string
 )
 
 var addCmd = &cobra.Command{
@@ -26,7 +27,8 @@ With --platform (repeatable) it is stored as a platform-specific command
 under platforms["<os>"].
 
 Calling add for an existing script merges: platform commands are added or
-updated per OS; description and tags only change when the flags are passed.`,
+updated per OS; description, tags and pre_run only change when the flags
+are passed.`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		name := args[0]
@@ -41,7 +43,19 @@ updated per OS; description and tags only change when the flags are passed.`,
 
 		cfg, path := loadCatalog()
 
-		cfg.Scripts[name] = mergeScript(cfg.Scripts[name], command, addDesc, addPlatforms, addTags)
+		for _, pre := range addPre {
+			if pre == "" {
+				continue
+			}
+			if pre != name {
+				if _, ok := cfg.Scripts[pre]; !ok {
+					fmt.Println(ui.WarningStyle.Render(fmt.Sprintf(
+						"warning: pre_run script %q does not exist yet (hc doctor will flag it)", pre)))
+				}
+			}
+		}
+
+		cfg.Scripts[name] = mergeScript(cfg.Scripts[name], command, addDesc, addPlatforms, addTags, addPre)
 
 		if err := saveCatalog(path, cfg); err != nil {
 			fatal("failed to save config: %v", err)
@@ -56,7 +70,7 @@ updated per OS; description and tags only change when the flags are passed.`,
 	},
 }
 
-func mergeScript(existing config.ScriptConfig, command, desc string, platforms, tags []string) config.ScriptConfig {
+func mergeScript(existing config.ScriptConfig, command, desc string, platforms, tags, preRun []string) config.ScriptConfig {
 	script := existing
 
 	if desc != "" {
@@ -64,6 +78,14 @@ func mergeScript(existing config.ScriptConfig, command, desc string, platforms, 
 	}
 	if len(tags) > 0 {
 		script.Tags = tags
+	}
+
+	if preRun != nil {
+		if len(preRun) == 1 && preRun[0] == "" {
+			script.PreRun = nil
+		} else {
+			script.PreRun = preRun
+		}
 	}
 
 	if len(platforms) > 0 {
@@ -84,10 +106,19 @@ func init() {
 	addCmd.Flags().StringVar(&addDesc, "desc", "", "script description")
 	addCmd.Flags().StringSliceVar(&addPlatforms, "platform", nil, "target platform (linux, darwin, windows); repeatable")
 	addCmd.Flags().StringSliceVar(&addTags, "tags", nil, "comma-separated tags (e.g. java,build)")
+	addCmd.Flags().StringSliceVar(&addPre, "pre", nil, "scripts to run before this one, in order (e.g. test,clean); pass \"\" to clear")
 
 	if err := addCmd.RegisterFlagCompletionFunc("platform",
 		func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 			return []string{"linux", "darwin", "windows"}, cobra.ShellCompDirectiveNoFileComp
+		}); err != nil {
+		panic(err)
+	}
+
+	if err := addCmd.RegisterFlagCompletionFunc("pre",
+		func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			cfg, _ := loadCatalog()
+			return ui.ScriptNames(cfg.Scripts), cobra.ShellCompDirectiveNoFileComp
 		}); err != nil {
 		panic(err)
 	}
