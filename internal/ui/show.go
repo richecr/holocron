@@ -17,6 +17,7 @@ func FormatScriptDetail(name string, script config.ScriptConfig, goos, resolved 
 	b.WriteString(detailRow("Tags", strings.Join(script.Tags, ", ")))
 	b.WriteString(detailRow("Dir", script.Dir))
 	b.WriteString(detailRow("Env", formatEnv(script.Env)))
+	b.WriteString(detailRow("Pre run", strings.Join(script.PreRun, " -> ")))
 
 	b.WriteString("\n")
 	b.WriteString(HeaderStyle.Render("Platforms"))

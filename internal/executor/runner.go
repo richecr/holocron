@@ -24,6 +24,51 @@ func ResolveCommand(script config.ScriptConfig) (string, error) {
 	return "", fmt.Errorf("no command available for platform: %s", currentOS)
 }
 
+// ResolveRunChain returns the ordered list of script names to execute for
+// name: pre_run scripts first (depth-first, each script at most once), the
+// requested script last. It rejects unknown references and cycles.
+func ResolveRunChain(scripts map[string]config.ScriptConfig, name string) ([]string, error) {
+	if _, ok := scripts[name]; !ok {
+		return nil, fmt.Errorf("script not found: %s", name)
+	}
+
+	var order []string
+	visited := map[string]bool{}
+
+	var visit func(node, parent string, stack []string) error
+	visit = func(node, parent string, stack []string) error {
+		for i, s := range stack {
+			if s == node {
+				cycle := append(stack[i:], node)
+				return fmt.Errorf("pre_run cycle: %s", strings.Join(cycle, " -> "))
+			}
+		}
+		if visited[node] {
+			return nil
+		}
+
+		script, ok := scripts[node]
+		if !ok {
+			return fmt.Errorf("pre_run of %q references unknown script %q", parent, node)
+		}
+
+		for _, pre := range script.PreRun {
+			if err := visit(pre, node, append(stack, node)); err != nil {
+				return err
+			}
+		}
+
+		visited[node] = true
+		order = append(order, node)
+		return nil
+	}
+
+	if err := visit(name, "", nil); err != nil {
+		return nil, err
+	}
+	return order, nil
+}
+
 func selectShell(settings config.Settings, goos, override string) (string, string, error) {
 	shell := override
 	if shell == "" {

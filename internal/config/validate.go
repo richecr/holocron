@@ -77,9 +77,75 @@ func Validate(cfg *Config) []Issue {
 				})
 			}
 		}
+
+		for _, pre := range script.PreRun {
+			if _, ok := cfg.Scripts[pre]; !ok {
+				issues = append(issues, Issue{
+					Severity: "error",
+					Message:  fmt.Sprintf("scripts.%q.pre_run references unknown script %q", name, pre),
+				})
+			}
+		}
+	}
+
+	issues = append(issues, detectPreRunCycles(cfg.Scripts)...)
+
+	return issues
+}
+
+func detectPreRunCycles(scripts map[string]ScriptConfig) []Issue {
+	var issues []Issue
+	reported := map[string]bool{}
+
+	var walk func(node string, stack []string) bool
+	walk = func(node string, stack []string) bool {
+		for i, s := range stack {
+			if s == node {
+				cycle := canonicalCycle(append(stack[i:], node))
+				key := strings.Join(cycle, ">")
+				if !reported[key] {
+					reported[key] = true
+					issues = append(issues, Issue{
+						Severity: "error",
+						Message:  fmt.Sprintf("scripts: pre_run cycle: %s", strings.Join(cycle, " -> ")),
+					})
+				}
+				return true
+			}
+		}
+		script, ok := scripts[node]
+		if !ok {
+			return false
+		}
+		for _, pre := range script.PreRun {
+			if walk(pre, append(stack, node)) {
+				return true
+			}
+		}
+		return false
+	}
+
+	for name := range scripts {
+		walk(name, nil)
 	}
 
 	return issues
+}
+
+// canonicalCycle rotates a cycle so it starts at its smallest element,
+// letting the dedupe key treat a -> b -> a and b -> a -> b as the same cycle.
+func canonicalCycle(cycle []string) []string {
+	core := cycle[:len(cycle)-1]
+	minIdx := 0
+	for i, s := range core {
+		if s < core[minIdx] {
+			minIdx = i
+		}
+	}
+	out := make([]string, 0, len(cycle))
+	out = append(out, core[minIdx:]...)
+	out = append(out, core[:minIdx]...)
+	return append(out, core[minIdx])
 }
 
 func FormatIssues(issues []Issue) string {
